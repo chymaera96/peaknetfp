@@ -1,0 +1,158 @@
+# Experimment metadata
+CHECKPOINT_NAME: "test"
+
+# Dataset directories
+DIR:
+    SOURCE_ROOT_DIR : '/datasets/neural-audio-fp-dataset/music/'
+    MIX_ROOT_DIR: '/datasets/mixotic/djmixes_raw/'
+    BG_ROOT_DIR : '/datasets/neural-audio-fp-dataset/aug/bg/'
+    IR_ROOT_DIR : '/datasets/neural-audio-fp-dataset/aug/ir/'
+    SPEECH_ROOT_DIR : '/datasets/neural-audio-fp-dataset/aug/speech/common_voice_8k/en/'
+                # Speech augmentation was not included in the ICASSP results.
+    OUTPUT_ROOT_DIR : './logs/emb/'
+                # embeddings will be stored in a subdirectory that follows the following
+                # pattern: OUTPUT_ROOT_DIR / CHECKPOINT_NAME / CHECKPOINT_INDEX
+                # Root directory where the generated embeddings (uncompressed
+                #  fingerprints) w ill be stored.
+    LOG_ROOT_DIR: 'logs/'
+                # Root directory where the checkpoint, tensorboard logs and
+                # images will be stored.
+    # TODO Remove this
+    #QUERIES_SEGMENTS_CSV: '/data/fingerprinting/qa/queries_segments.csv'
+    #REFERENCES_SEGMENTS_CSV: '/data/fingerprinting/qa/references_segments.csv'
+
+# Data selection for 'train' and 'generate' commands
+DATA_SEL:
+    TRAIN : '10k_icassp'
+                # '10k_icassp' for ICASSP results. No other options now.
+    TEST_DUMMY_DB : '100k_full_icassp'
+                # 'test' for minmal dummy_db for testing purposes.
+                # '10k_full' or '100k_full_icassp'. This scales your search
+                # experiment. Dataset_mini users can only use '10k_full' mode.
+                # It's actually '10k_30s' though.
+    TEST_QUERY_DB : 'unseen_icassp_stretch' #'unseen_icassp'
+                # TEST_QUERY_DB presets:
+                # - 'unseen_icassp': use the fixed {query, db} pairs reproducing
+                #                    ICASSP results--2,000 test IDs for 500
+                #                    songs.
+                # - 'unseen_icassp_stretch': Same as unseen_icassp, but stretched.
+                # - 'unseen_syn': randomly synthesize new queries from DB as
+                #                 in the training, and generate fingerprints.
+                #                 Currently, the DB source is set to 500 songs
+                #                 of the validation set.
+    REDUCE_ITEMS_P : 0
+                # Reduce training dataset size to a percentage (%). Set 0 to
+                # inactivate.
+
+PREPROCESSING:
+    NPEAKS: 256  # number of peaks to extract for each 1s segment
+    PEAK_ORDERING: 'amplitude_desc'
+    PEAK_SAMPLING: 'tile' # 0padding | tile
+    NORM_COORDS: True
+    TIMEFREQ_RATIO: 0
+    USE_AMPLITUDE: True
+
+# Model hyper-parameters
+MODEL:
+    EMB_SZ : 128  # Dimension of fingerprint, d in this paper.
+    ARCH: 'pointnet2'  # nnfp for NeuralFP fingerprinter | pointnet2 for PointNet++
+    DATA_TYPE: 'peaks'  # peaks if we want to work with peaks instead of the specaugment(melspec)
+    FS : 8000 # Sampling rate
+    DUR : 1. # Unit segment length in seconds.
+    HOP : .5 # Hop-size of the segment window in seconds.
+    STFT_WIN : 1024
+    STFT_HOP : 256
+    F_MIN : 300. # Frequency range.
+    F_MAX : 4000. # Frequency range.
+    N_MELS : 256 # Number of mel-frequency bins.
+    NORM_MEL_AMPlITUDE: True # normalize melspec amplitude
+    # NOTE:
+        # - In the current version, modifying {FS, DUR, HOP, STFT WIN, STFT HOP}
+        #   may cause the model to malfunction or cause input shape mismatch errors.
+        #   In that case, you will need to modify the kernel size strides of Conv
+        #   layers in 'model/fp/nnfp.py'.
+
+NEURALFP:
+    BN : 'layer_norm2d' # or 'batch_norm' --> Only used in NeuralFP
+
+POINTNET2:
+    GROUPING: "queryball" #knn | queryball
+    SAMPLING: "topn" #fps | topn
+    LAYER1:
+        NPOINT: 200  # number of points
+        RADIUS_LIST: [0.1,0.2,0.3]  # original radius_list=[0.1,0.2,0.4],
+        NSAMPLE_LIST: [4,8,16]  # how many points in each local region paired with radius
+        MLP: [[16,16,32], [32,32,64], [32,48,64]] # mlps are also paired with nsample.
+        # For bigger nsample we need bigger nfilters (mlp) to embed more information
+    LAYER2:
+        NPOINT: 100
+        RADIUS_LIST: [0.2,0.3,0.4]  # original radius_list=[0.2,0.4,0.8],
+        NSAMPLE_LIST: [4,8,16]  # how many points in each local region paired with radius
+        MLP: [[32,32,64], [64,64,128], [64,64,128]] 
+    LAYER3:
+        MLP: [128,256] # another MLP is appended at the code with EMB_SIZE
+
+# Batch-size
+BSZ:
+    TR_BATCH_SZ : 240 # Training batch size N must be EVEN number.
+    TR_N_ANCHOR : 120 # Usually N/2.
+    VAL_BATCH_SZ : 240 # Must be EVEN number.
+    VAL_N_ANCHOR : 120 # Usually N_val/2
+    TS_BATCH_SZ : 125
+        # It is recommended to set it one of {125, 236, 250, 295, 500} to
+        # avoid unwanted zero-paddings: our testset has 500 songs of 30s.
+
+# Training parameters
+TRAIN:
+    SEED: 13 # Seed for reproducibility
+    MAX_EPOCH : 100
+    OPTIMIZER : 'Adam' # 'LAMB' or 'Adam'. LAMB for BSZ >= 240
+    LR : 1e-4 # Initial learning rate. Usually in the range from 3e-5 to 1e-4 (BSZ < 1280)
+    LR_SCHEDULE : 'cos' # ['cos', 'cos-restart', 'None'].
+    CHECKPOINT_KEEP_N_HOUR: 1
+    TENSORBOARD : True
+    SAVE_IMG : True # Saving similarity matrix generated by loss object.
+    MINI_TEST_IN_TRAIN : True
+    MIXED_PRECISION: False
+    VAL_SIZE: 500 # original set to 250. Maximum is 500 (using NeuralFP ICASSP dataset)
+    # NOTE:
+    # - MINI_TEST_IN_TRAIN=True performs mini-search-test using part of
+    #   validation dataset at the end of every epoch in training.
+
+# Loss parameters
+LOSS:
+    LOSS_MODE : 'NTxent' # 'Semi-hard-triplet' coming soon for 'now-playing'.
+    TAU : 0.05 # 0.05 # Temperature parameter of NTxent loss. 0. < TAU < 1.
+
+# Time-domain augmentation parameters
+TD_AUG:
+    TR_SNR : [0, 10] # Synthesize replicas using random SNR in the range of [MIN, MAX]. SNR in decibel.
+    TS_SNR : [0, 10] # Active in real-time synthesis of test queries. TEST_QUERY='unseen_icassp' will inactivate this.
+    VAL_SNR : [0, 10]
+    TR_SPEECH_AUG : False # False in ICASSP results.
+    TS_SPEECH_AUG : False # False in ICASSP results.
+    VAL_SPEECH_AUG : False # False in ICASSP results.
+    TR_BG_AUG : False
+    TS_BG_AUG : False # TEST_QUERY='unseen_icassp' will inactivate this.
+    VAL_BG_AUG : False # Validation set always flollow this even in 'generate' command.
+    TR_IR_AUG : False
+    TS_IR_AUG : False # TEST_QUERY='unseen_icassp' will inactivate this.
+    VAL_IR_AUG: False
+    USE_SPECAUG : True  # use specaugment (false in pointnet) --> Only used in NeuralFP
+    MELSPEC_STRETCH: True  # stretch the melspectrogram
+    TR_STRETCH_AUG : False  # pysox stretching
+    TS_STRETCH_AUG : False # TEST_QUERY='unseen_icassp' will inactivate this.
+    VAL_STRETCH_AUG : False  # pysox stretching
+    MAX_STRETCH_AUG : 100
+
+# Specaug parameters
+SPEC_AUG:
+    SPECAUG_CHAIN : ['cutout', 'horizontal'] # 'cutout', 'horizontal', 'vertical'
+    SPECAUG_PROBS : 1.
+    SPECAUG_N_HOLES : 1
+    SPECAUG_HOLE_FILL : 'zeros' # one of {'min', 'zeros', 'random', [min_mag, max_mag]}
+
+# Device setup
+DEVICE:
+    CPU_N_WORKERS : 8 # 4 for minimal system. 8 is recommended.
+    CPU_MAX_QUEUE : 20 # 10 for minimal system. 20 is recommended.

@@ -1,0 +1,21 @@
+name: fp  # Change this to your preferred environment name
+channels:
+  - conda-forge
+  - defaults
+  - nvidia
+  
+dependencies:
+  - python=3.10  # Adjust if needed
+  - faiss-gpu=1.7.4  # Ensure compatibility with CUDA 12
+  - pip:
+    - numpy<2.0
+    - kapre==0.3.7
+    - sox==1.4.1
+    - tensorflow[and-cuda]==2.15.1
+    - click
+    - pyyaml
+    - pandas
+    - gputil
+    - matplotlib
+    - pytest
+prefix: /opt/conda/envs/fp

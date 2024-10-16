@@ -1,0 +1,22 @@
+version: "3.2"
+services:
+    peaknetfp:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        image: "peaknetfp:ismir25"
+        container_name: "peaknetfp"
+        network_mode: "host"
+        runtime: nvidia
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities: [gpu]
+        environment:
+            - NVIDIA_VISIBLE_DEVICES=all
+        stdin_open: true        # Keeps stdin open to allow interaction
+        tty: true               # Allocates a pseudo-TTY
+        entrypoint: /bin/bash
