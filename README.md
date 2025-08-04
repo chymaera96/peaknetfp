@@ -60,7 +60,7 @@ neural-audio-fp-dataset
 
 ## Model weights
 
-Model checkpoints are available in [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15782389.svg)](https://doi.org/10.5281/zenodo.15782389). They will be uploaded to Zenodo after accceptance. Checkpoints have to be stored in the root folder of this repo under `logs/checkpoint`.
+Model checkpoints are available in [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15782389.svg)](https://doi.org/10.5281/zenodo.15782389). Checkpoints have to be stored in the root folder of this repo under `logs/checkpoint`.
 
 ## Train
 
