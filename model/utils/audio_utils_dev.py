@@ -351,13 +351,12 @@ def load_audio(filename=str(),
         x = x / 2**15
 
     elif file_ext == 'mp3':
-        loader = MonoLoader(
-            filename=filename,
-            sampleRate=fs,
-            startTime=seg_start_sec,
-            endTime=(seg_start_sec + seg_length_sec)
-        )
-        x = loader()
+        loader = MonoLoader(filename=filename, sampleRate=fs)
+        audio = loader()
+        start_frame = int(seg_start_sec * fs)
+        end_frame = start_frame + int(seg_length_sec * fs)
+        x = audio[start_frame:end_frame]
+
 
 
     else:
