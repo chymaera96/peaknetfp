@@ -277,13 +277,14 @@ def get_fns_seg_list(fns_list=[],
             ])
             pt_wav.close()
         elif file_ext == 'mp3':
-            dur_sec = librosa.get_duration(filename=filename)
+            dur_sec = librosa.get_duration(path=filename)
             n_frames = int(dur_sec * fs)
             if n_frames > n_frames_in_seg:
                 n_segs = (n_frames - n_frames_in_seg + n_frames_in_hop) // n_frames_in_hop
             else:
                 n_segs = 1
             residual_frames = max(0, n_frames - ((n_segs - 1) * n_frames_in_hop + n_frames_in_seg))
+            assert type(n_segs) == int, f"n_segs should be int but got {type(n_segs)}"
 
         else:
             raise NotImplementedError(file_ext)
