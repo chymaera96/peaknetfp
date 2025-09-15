@@ -494,6 +494,8 @@ class Dataset:
             fps = sorted(fps)
         elif source_type == "file":
             fps = [source]
+        else:
+            raise ValueError(f"Unsupported source_type: {source_type}. Must be one of ['dir','list','file'].")
         _ts_n_anchor = self.ts_batch_sz  # Only anchors...
         ds = genUnbalSequence(
             fps,
