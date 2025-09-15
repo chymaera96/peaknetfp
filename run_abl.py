@@ -19,6 +19,7 @@ def generate_dir_fingerprints(cfg, checkpoint_name, checkpoint_index, source_dir
 
     # 2. Build dataset from directory of wav files
     dataset = Dataset(cfg)
+    assert source_type == "dir"
     ds = dataset.get_custom_db_ds(source=source_dir, source_type=source_type)
 
     # 3. Prepare memmap for embeddings
