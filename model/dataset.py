@@ -485,7 +485,7 @@ class Dataset:
         """
 
         if source_type == "dir":
-            print(f"Reading .wav files from directory: {source}")
+            # print(f"Reading .wav files from directory: {source}")
             fps = sorted(glob.glob(os.path.join(source + "/**/*.wav"), recursive=True))
         elif source_type == "list":
             fps = []
