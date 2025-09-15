@@ -10,6 +10,8 @@ import librosa
 import random
 import logging
 
+from essentia.standard import MonoLoader
+
 
 def max_normalize(x):
     """
@@ -244,82 +246,78 @@ def get_fns_seg_list(fns_list=[],
         
         if segment_mode=='all', returns all segments of all files included in fns_list.
     """
-    if hop == None: hop = duration
+    if hop is None:
+        hop = duration
     fns_event_seg_list = []
 
-    for offset_idx, filename in enumerate(fns_list):
-        # Get audio info. n_frames means audio samples.
-        n_frames_in_seg = fs * duration
-        n_frames_in_hop = fs * hop  # 2019 09.05
+    n_frames_in_seg = int(fs * duration)
+    n_frames_in_hop = int(fs * hop)
+
+    for filename in fns_list:
         file_ext = filename[-3:]
+        try:
+            if file_ext == 'wav':
+                pt_wav = wave.open(filename, 'r')
+                _fs = pt_wav.getframerate()
+                if fs != _fs:
+                    raise ValueError(f'Sample rate should be {fs} but got {_fs}')
+                n_frames = pt_wav.getnframes()
+                if n_frames > n_frames_in_seg:
+                    n_segs = (n_frames - n_frames_in_seg + n_frames_in_hop) // n_frames_in_hop
+                else:
+                    n_segs = 1
+                residual_frames = max(0, n_frames - ((n_segs - 1) * n_frames_in_hop + n_frames_in_seg))
+                pt_wav.close()
 
-        if file_ext == 'wav':
-            pt_wav = wave.open(filename, 'r')
-            _fs = pt_wav.getframerate()
+            elif file_ext == 'mp3':
+                loader = MonoLoader(filename=filename, sampleRate=fs)
+                audio = loader()
+                n_frames = len(audio)
+                if n_frames > n_frames_in_seg:
+                    n_segs = (n_frames - n_frames_in_seg + n_frames_in_hop) // n_frames_in_hop
+                else:
+                    n_segs = 1
+                residual_frames = max(0, n_frames - ((n_segs - 1) * n_frames_in_hop + n_frames_in_seg))
 
-            if fs != _fs:
-                raise ValueError('Sample rate should be {} but got {}'.format(
-                    str(fs), str(_fs)))
-
-            n_frames = pt_wav.getnframes() # ~239700 for 30 sec of audio
-            #n_segs = n_frames // n_frames_in_seg
-            if n_frames > n_frames_in_seg:
-                n_segs = (n_frames - n_frames_in_seg +
-                          n_frames_in_hop) // n_frames_in_hop
             else:
-                n_segs = 1
+                raise NotImplementedError(file_ext)
 
             n_segs = int(n_segs)
-            assert (n_segs > 0)
-            residual_frames = np.max([
-                0,
-                n_frames - ((n_segs - 1) * n_frames_in_hop + n_frames_in_seg)
-            ])
-            pt_wav.close()
-        elif file_ext == 'mp3':
-            dur_sec = librosa.get_duration(path=filename)
-            n_frames = int(dur_sec * fs)
-            if n_frames > n_frames_in_seg:
-                n_segs = (n_frames - n_frames_in_seg + n_frames_in_hop) // n_frames_in_hop
-            else:
-                n_segs = 1
-            residual_frames = max(0, n_frames - ((n_segs - 1) * n_frames_in_hop + n_frames_in_seg))
-            # assert type(n_segs) == int, f"n_segs should be int but got {n_segs}"
-            n_segs = int(n_segs)
+            assert n_segs > 0
 
-        else:
-            raise NotImplementedError(file_ext)
+        except Exception as e:
+            print(f"[Warning] Skipping corrupt file in get_fns_seg_list: {filename} ({e})")
+            continue
 
-        # 'all', 'random_oneshot', 'first'
+        # Build segment list
         if segment_mode == 'all':
             for seg_idx in range(n_segs):
-                offset_min, offset_max = int(-1 *
-                                             n_frames_in_hop), n_frames_in_hop
-                if seg_idx == 0:  # first seg
+                offset_min, offset_max = -n_frames_in_hop, n_frames_in_hop
+                if seg_idx == 0:
                     offset_min = 0
-                if seg_idx == (n_segs - 1):  # last seg
+                if seg_idx == (n_segs - 1):
                     offset_max = residual_frames
+                fns_event_seg_list.append([filename, seg_idx, offset_min, offset_max])
 
-                fns_event_seg_list.append(
-                    [filename, seg_idx, offset_min, offset_max])
         elif segment_mode == 'random_oneshot':
             seg_idx = np.random.randint(0, n_segs)
             offset_min, offset_max = n_frames_in_hop, n_frames_in_hop
-            if seg_idx == 0:  # first seg
+            if seg_idx == 0:
                 offset_min = 0
-            if seg_idx == (n_segs - 1):  # last seg
+            if seg_idx == (n_segs - 1):
                 offset_max = residual_frames
-            fns_event_seg_list.append(
-                [filename, seg_idx, offset_min, offset_max])
+            fns_event_seg_list.append([filename, seg_idx, offset_min, offset_max])
+
         elif segment_mode == 'first':
             seg_idx = 0
             offset_min, offset_max = 0, 0
-            fns_event_seg_list.append(
-                [filename, seg_idx, offset_min, offset_max])
+            fns_event_seg_list.append([filename, seg_idx, offset_min, offset_max])
+
         else:
             raise NotImplementedError(segment_mode)
 
     return fns_event_seg_list
+
 
 
 def load_audio(filename=str(),
@@ -353,8 +351,14 @@ def load_audio(filename=str(),
         x = x / 2**15
 
     elif file_ext == 'mp3':
-        # librosa will resample automatically to fs
-        x, _ = librosa.load(filename, sr=fs, offset=seg_start_sec, duration=seg_length_sec, mono=True)
+        loader = MonoLoader(
+            filename=filename,
+            sampleRate=fs,
+            startTime=seg_start_sec,
+            endTime=(seg_start_sec + seg_length_sec)
+        )
+        x = loader()
+
 
     else:
         raise NotImplementedError(file_ext)
