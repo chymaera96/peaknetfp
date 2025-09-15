@@ -284,7 +284,7 @@ def get_fns_seg_list(fns_list=[],
             else:
                 n_segs = 1
             residual_frames = max(0, n_frames - ((n_segs - 1) * n_frames_in_hop + n_frames_in_seg))
-            assert type(n_segs) == int, f"n_segs should be int but got {type(n_segs)}"
+            assert type(n_segs) == int, f"n_segs should be int but got {n_segs}"
 
         else:
             raise NotImplementedError(file_ext)
