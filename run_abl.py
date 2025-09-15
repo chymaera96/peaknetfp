@@ -19,7 +19,7 @@ def generate_dir_fingerprints(cfg, checkpoint_name, checkpoint_index, source_dir
 
     # 2. Build dataset from directory of wav files
     dataset = Dataset(cfg)
-    assert source_type == "dir"
+    # assert source_type == "dir"
     ds = dataset.get_custom_db_ds(source=source_dir, source_type=source_type)
 
     # 3. Prepare memmap for embeddings
@@ -67,12 +67,13 @@ def main():
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    generate_dir_fingerprints(cfg,
-                              args.checkpoint_name,
-                              args.checkpoint_index,
-                              args.source_dir,
-                              args.output_dir,
-                              args.out_name)
+    generate_dir_fingerprints(cfg=cfg,
+                                checkpoint_name=args.checkpoint_name,
+                                checkpoint_index=args.checkpoint_index,
+                                source_dir=args.source_dir,
+                                output_dir=args.output_dir,
+                                source_type="dir",
+                                out_name=args.out_name)
 
 
 if __name__ == "__main__":
