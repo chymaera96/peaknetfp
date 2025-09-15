@@ -11,7 +11,7 @@ from model.dataset import Dataset
 from model.generate import build_fp, load_checkpoint, test_step
 
 
-def generate_dir_fingerprints(cfg, checkpoint_name, checkpoint_index, source_dir,output_dir, source_type="dir", out_name="dummy_db"):
+def generate_dir_fingerprints(cfg, checkpoint_name, checkpoint_index, source_dir, output_dir, source_type="dir", out_name="dummy_db"):
     # 1. Build model
     melspec_layer, fingerprinter = build_fp(cfg)
     checkpoint_root_dir = os.path.join(cfg['DIR']['LOG_ROOT_DIR'], 'checkpoint')
