@@ -342,25 +342,19 @@ class genUnbalSequence(Sequence):
         Xp_batch = None
         for idx in anchor_idx_list:  # idx: index for one sample
             pos_start_sec_list = []
-            # fns_event_seg_list = [[filename, seg_idx, offset_min, offset_max], [ ... ] , ... [ ... ]]
-            offset_min, offset_max = self.fns_event_seg_list[idx][
-                2], self.fns_event_seg_list[idx][3]
+            offset_min, offset_max = self.fns_event_seg_list[idx][2], self.fns_event_seg_list[idx][3]
             anchor_offset_min = np.max([offset_min, -self.offset_margin_frame])
             anchor_offset_max = np.min([offset_max, self.offset_margin_frame])
-            if (self.random_offset_anchor == True) & (self.experimental_mode
-                                                      == False):
-                # Usually, we can apply random offset to anchor only in training.
+            if (self.random_offset_anchor == True) & (self.experimental_mode == False):
                 np.random.seed(idx)
-                # Calculate anchor_start_sec
                 _anchor_offset_frame = np.random.randint(
                     low=anchor_offset_min, high=anchor_offset_max)
                 _anchor_offset_sec = _anchor_offset_frame / self.fs
-                anchor_start_sec = self.fns_event_seg_list[idx][
-                    1] * self.hop + _anchor_offset_sec
+                anchor_start_sec = self.fns_event_seg_list[idx][1] * self.hop + _anchor_offset_sec
             else:
                 _anchor_offset_frame = 0
                 anchor_start_sec = self.fns_event_seg_list[idx][1] * self.hop
-            """ Calculate multiple(=self.n_pos_per_anchor) pos_start_sec. """
+
             if self.n_pos_per_anchor > 0:
                 pos_offset_min = np.max([
                     (_anchor_offset_frame - self.offset_margin_frame),
@@ -371,88 +365,70 @@ class genUnbalSequence(Sequence):
                     offset_max
                 ])
                 if self.experimental_mode:
-                    # In experimental_mode, we use a set of pre-defined offset for multiple positive replicas...
-                    _pos_offset_sec_list = self.experimental_mode_offset_sec_list  # [-0.2, -0.1,  0. ,  0.1,  0.2] for n_pos=5 with hop=0.5s
-                    _pos_offset_sec_list[(
-                        _pos_offset_sec_list <
-                        pos_offset_min / self.fs)] = pos_offset_min / self.fs
-                    _pos_offset_sec_list[(
-                        _pos_offset_sec_list >
-                        pos_offset_max / self.fs)] = pos_offset_max / self.fs
-                    pos_start_sec_list = self.fns_event_seg_list[idx][
-                        1] * self.hop + _pos_offset_sec_list
+                    _pos_offset_sec_list = self.experimental_mode_offset_sec_list
+                    _pos_offset_sec_list[(_pos_offset_sec_list < pos_offset_min / self.fs)] = pos_offset_min / self.fs
+                    _pos_offset_sec_list[(_pos_offset_sec_list > pos_offset_max / self.fs)] = pos_offset_max / self.fs
+                    pos_start_sec_list = self.fns_event_seg_list[idx][1] * self.hop + _pos_offset_sec_list
                 else:
-                    if pos_offset_min==pos_offset_max==0:
-                        # Only the case of running extras/dataset2wav.py 
-                        # as offset_margin_hot_rate=0
-                        pos_start_sec_list = self.fns_event_seg_list[idx][
-                            1] * self.hop
-                        pos_start_sec_list = [pos_start_sec_list]
-                        # print('!!!!!!!!!!!!!!!!!!!!!!')
-                        # print(pos_start_sec_list)
-                        # print([anchor_start_sec])
-
+                    if pos_offset_min == pos_offset_max == 0:
+                        pos_start_sec_list = [self.fns_event_seg_list[idx][1] * self.hop]
                     else:
-                        # Otherwise, we apply random offset to replicas 
                         _pos_offset_frame_list = np.random.randint(
                             low=pos_offset_min,
                             high=pos_offset_max,
                             size=self.n_pos_per_anchor)
                         _pos_offset_sec_list = _pos_offset_frame_list / self.fs
-                        pos_start_sec_list = self.fns_event_seg_list[idx][
-                            1] * self.hop + _pos_offset_sec_list  
-            """
-            load audio returns: [anchor, pos1, pos2,..pos_n]
-            """
-            #print(self.fns_event_seg_list[idx])
-            start_sec_list = np.concatenate(
-                ([anchor_start_sec], pos_start_sec_list))
-            xs = load_audio_multi_start(self.fns_event_seg_list[idx][0],
-                                        start_sec_list, self.duration, self.fs,
-                                        self.amp_mode)  # xs: ((1+n_pos)),T)
+                        pos_start_sec_list = self.fns_event_seg_list[idx][1] * self.hop + _pos_offset_sec_list
+
+            start_sec_list = np.concatenate(([anchor_start_sec], pos_start_sec_list))
+            try:
+                xs = load_audio_multi_start(
+                    self.fns_event_seg_list[idx][0],
+                    start_sec_list, self.duration, self.fs, self.amp_mode
+                )
+            except Exception as e:
+                print(f"[Warning] Skipping corrupt file: {self.fns_event_seg_list[idx][0]} ({e})")
+                xs = np.zeros((1 + self.n_pos_per_anchor, int(self.duration * self.fs)), dtype=np.float32)
 
             if Xa_batch is None:
                 Xa_batch = xs[0, :].reshape((1, -1))
-                Xp_batch = xs[
-                    1:, :]  # If self.n_pos_per_anchor==0: this produces an empty array
+                Xp_batch = xs[1:, :]
             else:
-                Xa_batch = np.vstack((Xa_batch, xs[0, :].reshape(
-                    (1, -1))))  # Xa_batch: (n_anchor, T)
-                Xp_batch = np.vstack(
-                    (Xp_batch, xs[1:, :]))  # Xp_batch: (n_pos, T)
+                Xa_batch = np.vstack((Xa_batch, xs[0, :].reshape((1, -1))))
+                Xp_batch = np.vstack((Xp_batch, xs[1:, :]))
         return Xa_batch, Xp_batch
 
 
     def __bg_batch_load(self, idx_list):
-        X_bg_batch = None  # (n_batch+n_batch//n_class, fs*k)
+        X_bg_batch = None
         random_offset_sec = np.random.randint(
             0, self.duration * self.fs / 2, size=len(idx_list)) / self.fs
         for i, idx in enumerate(idx_list):
             idx = idx % self.n_bg_samples
             offset_sec = np.min(
                 [random_offset_sec[i], self.fns_bg_seg_list[idx][3] / self.fs])
-
-            X = load_audio(filename=self.fns_bg_seg_list[idx][0],
-                           seg_start_sec=self.fns_bg_seg_list[idx][1] *
-                           self.duration,
-                           offset_sec=offset_sec,
-                           seg_length_sec=self.duration,
-                           seg_pad_offset_sec=0.,
-                           fs=self.fs,
-                           amp_mode='normal')
+            try:
+                X = load_audio(filename=self.fns_bg_seg_list[idx][0],
+                               seg_start_sec=self.fns_bg_seg_list[idx][1] * self.duration,
+                               offset_sec=offset_sec,
+                               seg_length_sec=self.duration,
+                               seg_pad_offset_sec=0.,
+                               fs=self.fs,
+                               amp_mode='normal')
+            except Exception as e:
+                print(f"[Warning] Skipping corrupt bg file: {self.fns_bg_seg_list[idx][0]} ({e})")
+                X = np.zeros((int(self.duration * self.fs),), dtype=np.float32)
 
             X = X.reshape(1, -1)
-
             if X_bg_batch is None:
                 X_bg_batch = X
             else:
                 X_bg_batch = np.concatenate((X_bg_batch, X), axis=0)
-
         return X_bg_batch
 
 
     def __speech_batch_load(self, idx_list):
-        X_speech_batch = None  # (n_batch+n_batch//n_class, fs*k)
+        X_speech_batch = None
         random_offset_sec = np.random.randint(
             0, self.duration * self.fs / 2, size=len(idx_list)) / self.fs
         for i, idx in enumerate(idx_list):
@@ -461,15 +437,18 @@ class genUnbalSequence(Sequence):
                 random_offset_sec[i],
                 self.fns_speech_seg_list[idx][3] / self.fs
             ])
+            try:
+                X = load_audio(filename=self.fns_speech_seg_list[idx][0],
+                               seg_start_sec=self.fns_speech_seg_list[idx][1] * self.duration,
+                               offset_sec=offset_sec,
+                               seg_length_sec=self.duration,
+                               seg_pad_offset_sec=0.,
+                               fs=self.fs,
+                               amp_mode='normal')
+            except Exception as e:
+                print(f"[Warning] Skipping corrupt speech file: {self.fns_speech_seg_list[idx][0]} ({e})")
+                X = np.zeros((int(self.duration * self.fs),), dtype=np.float32)
 
-            X = load_audio(filename=self.fns_speech_seg_list[idx][0],
-                           seg_start_sec=self.fns_speech_seg_list[idx][1] *
-                           self.duration,
-                           offset_sec=offset_sec,
-                           seg_length_sec=self.duration,
-                           seg_pad_offset_sec=0.,
-                           fs=self.fs,
-                           amp_mode='normal')
             X = X.reshape(1, -1)
 
             if X_speech_batch is None:
@@ -481,19 +460,21 @@ class genUnbalSequence(Sequence):
 
 
     def __ir_batch_load(self, idx_list):
-        X_ir_batch = None  # (n_batch+n_batch//n_class, fs*k)
-
+        X_ir_batch = None
         for idx in idx_list:
             idx = idx % self.n_ir_samples
+            try:
+                X = load_audio(filename=self.fns_ir_seg_list[idx][0],
+                               seg_start_sec=self.fns_ir_seg_list[idx][1] * self.duration,
+                               offset_sec=0.0,
+                               seg_length_sec=self.duration,
+                               seg_pad_offset_sec=0.0,
+                               fs=self.fs,
+                               amp_mode='normal')
+            except Exception as e:
+                print(f"[Warning] Skipping corrupt IR file: {self.fns_ir_seg_list[idx][0]} ({e})")
+                X = np.zeros((int(self.duration * self.fs),), dtype=np.float32)
 
-            X = load_audio(filename=self.fns_ir_seg_list[idx][0],
-                           seg_start_sec=self.fns_ir_seg_list[idx][1] *
-                           self.duration,
-                           offset_sec=0.0,
-                           seg_length_sec=self.duration,
-                           seg_pad_offset_sec=0.0,
-                           fs=self.fs,
-                           amp_mode='normal')
             if len(X) > MAX_IR_LENGTH:
                 X = X[:MAX_IR_LENGTH]
 
@@ -503,5 +484,5 @@ class genUnbalSequence(Sequence):
                 X_ir_batch = X
             else:
                 X_ir_batch = np.concatenate((X_ir_batch, X), axis=0)
-
+                
         return X_ir_batch
