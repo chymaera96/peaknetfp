@@ -6,6 +6,7 @@
 import wave
 import numpy as np
 import sox
+import librosa
 import random
 import logging
 
@@ -275,6 +276,15 @@ def get_fns_seg_list(fns_list=[],
                 n_frames - ((n_segs - 1) * n_frames_in_hop + n_frames_in_seg)
             ])
             pt_wav.close()
+        elif file_ext == 'mp3':
+            dur_sec = librosa.get_duration(filename=filename)
+            n_frames = int(dur_sec * fs)
+            if n_frames > n_frames_in_seg:
+                n_segs = (n_frames - n_frames_in_seg + n_frames_in_hop) // n_frames_in_hop
+            else:
+                n_segs = 1
+            residual_frames = max(0, n_frames - ((n_segs - 1) * n_frames_in_hop + n_frames_in_seg))
+
         else:
             raise NotImplementedError(file_ext)
 
@@ -328,11 +338,9 @@ def load_audio(filename=str(),
 
     # Get file-info
     file_ext = filename[-3:]
-    #print(start_frame_idx, end_frame_idx)
 
     if file_ext == 'wav':
         pt_wav = wave.open(filename, 'r')
-        # Check sample rate
         _fs = pt_wav.getframerate()
         if fs != _fs:
             raise ValueError(f'Sample rate should be {fs} but got {_fs} for {filename}')
@@ -340,9 +348,15 @@ def load_audio(filename=str(),
         x = pt_wav.readframes(seg_length_frame)
         pt_wav.close()
         x = np.frombuffer(x, dtype=np.int16)
-        x = x / 2**15  # dtype=float. normalize to [-1, 1] float
+        x = x / 2**15
+
+    elif file_ext == 'mp3':
+        # librosa will resample automatically to fs
+        x, _ = librosa.load(filename, sr=fs, offset=seg_start_sec, duration=seg_length_sec, mono=True)
+
     else:
         raise NotImplementedError(file_ext)
+
 
     # Max Normalize, random amplitude
     if amp_mode == 'normal':
