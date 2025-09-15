@@ -9,12 +9,12 @@ DIR:
     IR_ROOT_DIR : ''  # NeuralFP legacy
     SPEECH_ROOT_DIR : ''  # NeuralFP legacy
                 # Speech augmentation was not included in the ICASSP results.
-    OUTPUT_ROOT_DIR : './logs/emb/'
+    OUTPUT_ROOT_DIR : '/data/scratch/acw723/peaknetfp_db/logs/emb/'
                 # embeddings will be stored in a subdirectory that follows the following
                 # pattern: OUTPUT_ROOT_DIR / CHECKPOINT_NAME / CHECKPOINT_INDEX
                 # Root directory where the generated embeddings (uncompressed
                 #  fingerprints) w ill be stored.
-    LOG_ROOT_DIR: 'logs/'
+    LOG_ROOT_DIR: '/data/scratch/acw723/peaknetfp_db/logs/'
                 # Root directory where the checkpoint, tensorboard logs and
                 # images will be stored.
 
