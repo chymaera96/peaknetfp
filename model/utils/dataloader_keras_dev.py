@@ -342,7 +342,7 @@ class genUnbalSequence(Sequence):
         """ Get Xa_batch and Xp_batch for anchor (original) and positive (replica) samples. """
         Xa_batch = None
         Xp_batch = None
-        for idx in anchor_idx_list:  # idx: index for one sample
+        for idx in tqdm(anchor_idx_list, desc="Loading batch", leave=False):
             pos_start_sec_list = []
             offset_min, offset_max = self.fns_event_seg_list[idx][2], self.fns_event_seg_list[idx][3]
             anchor_offset_min = np.max([offset_min, -self.offset_margin_frame])
