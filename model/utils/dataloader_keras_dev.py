@@ -6,6 +6,7 @@ from model.utils.audio_utils_dev import (bg_mix_batch, ir_aug_batch, stretch_aug
                                          load_audio, get_fns_seg_list,
                                          load_audio_multi_start)
 import numpy as np
+from essentia.standard import MonoLoader
 
 MAX_IR_LENGTH = 600#400  # 50ms with fs=8000
 
@@ -545,11 +546,9 @@ class FastGenSequence(Sequence):
             if fname not in self.audio_cache:
                 try:
                     # Load whole file once
-                    audio = load_audio(filename=fname,
-                                       seg_start_sec=0,
-                                       seg_length_sec=None,
-                                       fs=self.fs,
-                                       amp_mode=self.amp_mode)
+
+                    audio = MonoLoader(filename=fname, sampleRate=self.fs)()
+                    self.audio_cache[fname] = audio
                     self.audio_cache[fname] = audio
                 except Exception as e:
                     print(f"[Warning] Failed to load {fname}: {e}")
