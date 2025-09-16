@@ -484,5 +484,146 @@ class genUnbalSequence(Sequence):
                 X_ir_batch = X
             else:
                 X_ir_batch = np.concatenate((X_ir_batch, X), axis=0)
-                
+
         return X_ir_batch
+    
+
+
+class FastGenSequence(Sequence):
+    """
+    Faster version of genUnbalSequence for fingerprint generation only.
+    - Preloads all audio into memory once.
+    - Vectorized batch assembly (no slow np.vstack loops).
+    - No background/IR/speech/stretch augmentations.
+    """
+
+    def __init__(self,
+                 fns_event_list,
+                 bsz=120,
+                 n_anchor=60,
+                 duration=1,
+                 hop=0.5,
+                 fs=8000,
+                 shuffle=False,
+                 seg_mode="all",
+                 amp_mode='normal',
+                 drop_the_last_non_full_batch=True):
+        self.bsz = bsz
+        self.n_anchor = n_anchor
+        if bsz != n_anchor:
+            self.n_pos_per_anchor = round((bsz - n_anchor) / n_anchor)
+            self.n_pos_bsz = bsz - n_anchor
+        else:
+            self.n_pos_per_anchor = 0
+            self.n_pos_bsz = 0
+
+        self.duration = duration
+        self.hop = hop
+        self.fs = fs
+        self.shuffle = shuffle
+        self.seg_mode = seg_mode
+        self.amp_mode = amp_mode
+        self.offset_margin_frame = int(hop * fs * 0.4)
+
+        # Build segment list
+        self.fns_event_seg_list = get_fns_seg_list(
+            fns_event_list, self.seg_mode, self.fs, self.duration, hop=self.hop
+        )
+
+        if drop_the_last_non_full_batch:
+            self.n_samples = (len(self.fns_event_seg_list) // n_anchor) * n_anchor
+        else:
+            self.n_samples = len(self.fns_event_seg_list)
+
+        self.index_event = np.arange(self.n_samples)
+        if self.shuffle:
+            self.on_epoch_end()
+
+        # === Preload audio cache ===
+        self.audio_cache = {}
+        for fname, _, _, _ in self.fns_event_seg_list:
+            if fname not in self.audio_cache:
+                try:
+                    # Load whole file once
+                    audio = load_audio(filename=fname,
+                                       seg_start_sec=0,
+                                       seg_length_sec=None,
+                                       fs=self.fs,
+                                       amp_mode=self.amp_mode)
+                    self.audio_cache[fname] = audio
+                except Exception as e:
+                    print(f"[Warning] Failed to load {fname}: {e}")
+                    self.audio_cache[fname] = None
+
+    def __len__(self):
+        return int(np.ceil(self.n_samples / float(self.n_anchor)))
+
+    def on_epoch_end(self):
+        if self.shuffle:
+            self.index_event = np.random.permutation(self.n_samples)
+
+    def __getitem__(self, idx):
+        """ Return (anchors, positives) batch """
+        index_anchor_for_batch = self.index_event[
+            idx * self.n_anchor : (idx + 1) * self.n_anchor
+        ]
+
+        Xa_batch, Xp_batch = self.__event_batch_load(index_anchor_for_batch)
+
+        Xa_batch = np.expand_dims(Xa_batch, 1).astype(np.float32)
+        Xp_batch = np.expand_dims(Xp_batch, 1).astype(np.float32)
+        return Xa_batch, Xp_batch
+
+    def __event_batch_load(self, anchor_idx_list):
+        """ Vectorized anchor/positive assembly with preloaded cache """
+        n_anchor = len(anchor_idx_list)
+        Xa_batch = np.zeros((n_anchor, int(self.duration * self.fs)), dtype=np.float32)
+        Xp_batch = np.zeros((n_anchor * self.n_pos_per_anchor, int(self.duration * self.fs)),
+                            dtype=np.float32)
+
+        pos_counter = 0
+        for j, idx in enumerate(anchor_idx_list):
+            fname, seg_idx, offset_min, offset_max = self.fns_event_seg_list[idx]
+
+            # Default anchor start
+            anchor_start_sec = seg_idx * self.hop
+
+            # Build start times (anchor + positives)
+            start_sec_list = [anchor_start_sec]
+            if self.n_pos_per_anchor > 0:
+                if offset_min == offset_max == 0:
+                    pos_start_sec_list = [anchor_start_sec] * self.n_pos_per_anchor
+                else:
+                    _pos_offset_frame_list = np.random.randint(
+                        low=offset_min, high=offset_max, size=self.n_pos_per_anchor
+                    )
+                    _pos_offset_sec_list = _pos_offset_frame_list / self.fs
+                    pos_start_sec_list = seg_idx * self.hop + _pos_offset_sec_list
+                start_sec_list.extend(pos_start_sec_list)
+
+            # Use cached audio if available, else fallback to loader
+            if self.audio_cache.get(fname) is None:
+                try:
+                    xs = load_audio_multi_start(fname, start_sec_list, self.duration, self.fs, self.amp_mode)
+                except Exception as e:
+                    print(f"[Warning] Corrupt file {fname}, using zeros ({e})")
+                    xs = np.zeros((1 + self.n_pos_per_anchor, int(self.duration * self.fs)), dtype=np.float32)
+            else:
+                audio = self.audio_cache[fname]
+                xs = []
+                for s in start_sec_list:
+                    start_frame = int(s * self.fs)
+                    end_frame = start_frame + int(self.duration * self.fs)
+                    seg = audio[start_frame:end_frame]
+                    if len(seg) < int(self.duration * self.fs):
+                        seg = np.pad(seg, (0, int(self.duration * self.fs) - len(seg)))
+                    xs.append(seg)
+                xs = np.stack(xs, axis=0)
+
+            # Fill arrays
+            Xa_batch[j, :] = xs[0, :]
+            if self.n_pos_per_anchor > 0:
+                Xp_batch[pos_counter:pos_counter + self.n_pos_per_anchor, :] = xs[1:, :]
+                pos_counter += self.n_pos_per_anchor
+
+        return Xa_batch, Xp_batch

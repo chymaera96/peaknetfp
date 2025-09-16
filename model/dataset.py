@@ -5,7 +5,7 @@
 """ dataset.py """
 import glob
 import os
-from model.utils.dataloader_keras_dev import genUnbalSequence
+from model.utils.dataloader_keras_dev import genUnbalSequence, FastGenSequence
 
 
 class Dataset:
@@ -501,7 +501,7 @@ class Dataset:
         else:
             raise ValueError(f"Unsupported source_type: {source_type}. Must be one of ['dir','list','file'].")
         _ts_n_anchor = self.ts_batch_sz  # Only anchors...
-        ds = genUnbalSequence(
+        ds = FastGenSequence(
             fps,
             self.ts_batch_sz,
             _ts_n_anchor,
@@ -509,7 +509,7 @@ class Dataset:
             self.hop,
             self.fs,
             shuffle=False,
-            random_offset_anchor=False,
             drop_the_last_non_full_batch=False,
-        )  # No augmentations, No drop-samples.
+        )
+
         return ds
