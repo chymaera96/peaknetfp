@@ -6,6 +6,7 @@ from model.utils.audio_utils_dev import (bg_mix_batch, ir_aug_batch, stretch_aug
                                          load_audio, get_fns_seg_list,
                                          load_audio_multi_start)
 import numpy as np
+from tqdm import tqdm
 from essentia.standard import MonoLoader
 
 MAX_IR_LENGTH = 600#400  # 50ms with fs=8000
@@ -542,7 +543,7 @@ class FastGenSequence(Sequence):
 
         # === Preload audio cache ===
         self.audio_cache = {}
-        for fname, _, _, _ in self.fns_event_seg_list:
+        for fname, _, _, _ in tqdm(self.fns_event_seg_list, desc="Preloading audio"):
             if fname not in self.audio_cache:
                 try:
                     # Load whole file once
@@ -577,11 +578,11 @@ class FastGenSequence(Sequence):
         """ Vectorized anchor/positive assembly with preloaded cache """
         n_anchor = len(anchor_idx_list)
         Xa_batch = np.zeros((n_anchor, int(self.duration * self.fs)), dtype=np.float32)
-        Xp_batch = np.zeros((n_anchor * self.n_pos_per_anchor, int(self.duration * self.fs)),
-                            dtype=np.float32)
+        Xp_batch = np.zeros((n_anchor * self.n_pos_per_anchor,
+                            int(self.duration * self.fs)), dtype=np.float32)
 
         pos_counter = 0
-        for j, idx in enumerate(anchor_idx_list):
+        for j, idx in enumerate(tqdm(anchor_idx_list, desc="Loading batch", leave=False)):
             fname, seg_idx, offset_min, offset_max = self.fns_event_seg_list[idx]
 
             # Default anchor start
