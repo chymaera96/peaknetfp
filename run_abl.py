@@ -76,6 +76,8 @@ def main():
                         help="Directory to save generated fingerprints")
     parser.add_argument("--out_name", type=str, default="dummy_db",
                         help="Base name for output files (default: dummy_db)")
+    parser.add_argument("--source_type", type=str, default="dir",
+                        help="Type of source: 'dir' (default) or 'csv'")
     args = parser.parse_args()
 
     # Load config YAML into dict
@@ -87,7 +89,7 @@ def main():
                                 checkpoint_index=args.checkpoint_index,
                                 source_dir=args.source_dir,
                                 output_dir=args.output_dir,
-                                source_type="dir",
+                                source_type=args.source_type,
                                 out_name=args.out_name)
 
 
