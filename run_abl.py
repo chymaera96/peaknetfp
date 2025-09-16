@@ -11,16 +11,23 @@ from model.dataset import Dataset
 from model.generate import build_fp, load_checkpoint, test_step
 
 
-def generate_dir_fingerprints(cfg, checkpoint_name, checkpoint_index, source_dir, output_dir, source_type="dir", out_name="dummy_db"):
+from tensorflow.keras.utils import Progbar
+
+def generate_dir_fingerprints(cfg, checkpoint_name, checkpoint_index, source_dir, output_dir,
+                              source_type="dir", out_name="dummy_db"):
+    yellow = "\033[33m"
+    reset = "\033[0m"
+
+    print(f"{yellow}[INFO] Building model and loading checkpoint '{checkpoint_name}' (index={checkpoint_index})...{reset}")
     # 1. Build model
     melspec_layer, fingerprinter = build_fp(cfg)
     checkpoint_root_dir = os.path.join(cfg['DIR']['LOG_ROOT_DIR'], 'checkpoint')
     load_checkpoint(checkpoint_root_dir, checkpoint_name, checkpoint_index, fingerprinter)
 
-    # 2. Build dataset from directory of wav files
+    # 2. Build dataset from source
     dataset = Dataset(cfg)
-    # assert source_type == "dir"
     ds = dataset.get_custom_db_ds(source=source_dir, source_type=source_type)
+    print(f"{yellow}[INFO] Loaded dataset from {source_type}='{source_dir}' with {ds.n_samples} samples.{reset}")
 
     # 3. Prepare memmap for embeddings
     n_items = ds.n_samples
@@ -35,16 +42,24 @@ def generate_dir_fingerprints(cfg, checkpoint_name, checkpoint_index, source_dir
     enq.start(workers=cfg['DEVICE']['CPU_N_WORKERS'],
               max_queue_size=cfg['DEVICE']['CPU_MAX_QUEUE'])
 
+    print(f"{yellow}[INFO] Starting fingerprint generation: {n_items} items, batch size={bsz}, emb_dim={emb_sz}{reset}")
+    progbar = Progbar(len(enq.sequence))
+
     while i < len(enq.sequence):
-        X, _ = next(enq.get())
-        emb = test_step(X, melspec_layer, fingerprinter, cfg)
-        arr[i*bsz:(i+1)*bsz, :] = emb.numpy()
+        try:
+            X, _ = next(enq.get())
+            emb = test_step(X, melspec_layer, fingerprinter, cfg)
+            arr[i*bsz:(i+1)*bsz, :] = emb.numpy()
+        except Exception as e:
+            print(f"{yellow}[WARNING] Skipping batch {i} due to error: {e}{reset}")
         i += 1
+        progbar.update(i)
     enq.stop()
 
     arr.flush()
     np.save(os.path.join(output_dir, f"{out_name}_shape.npy"), (n_items, emb_sz))
-    print(f"Stored {n_items} embeddings in {output_dir}")
+    print(f"{yellow}[INFO] Stored {n_items} embeddings in {output_dir}/{out_name}.mm{reset}")
+
 
 
 def main():
