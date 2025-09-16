@@ -9,6 +9,7 @@ import sox
 import librosa
 import random
 import logging
+from tqdm import tqdm
 
 from essentia.standard import MonoLoader
 
@@ -253,7 +254,7 @@ def get_fns_seg_list(fns_list=[],
     n_frames_in_seg = int(fs * duration)
     n_frames_in_hop = int(fs * hop)
 
-    for filename in fns_list:
+    for filename in tqdm(fns_list, desc='Getting segment list'):
         file_ext = filename[-3:]
         try:
             if file_ext == 'wav':
