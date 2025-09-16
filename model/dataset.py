@@ -5,6 +5,7 @@
 """ dataset.py """
 import glob
 import os
+import json
 from model.utils.dataloader_keras_dev import genUnbalSequence, FastGenSequence
 
 
@@ -491,11 +492,8 @@ class Dataset:
             fps = sorted(wavs + mp3s)
 
         elif source_type == "list":
-            fps = []
-            with open(source, "r") as fin:
-                for l in fin:
-                    fps.append(l.split("\n")[0])
-            fps = sorted(fps)
+            with open(source, "r") as f:
+                fps = json.load(f)
         elif source_type == "file":
             fps = [source]
         else:
